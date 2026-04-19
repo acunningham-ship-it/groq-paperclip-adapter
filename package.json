@@ -1,0 +1,48 @@
+{
+  "name": "groq-paperclip-adapter",
+  "version": "0.0.1",
+  "description": "Paperclip adapter for Groq's free tier (Llama 3.3 70B, Qwen 3 32B, Kimi K2). Lightning-fast inference.",
+  "type": "module",
+  "license": "MIT",
+  "author": "Armani Cunningham",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/acunningham-ship-it/groq-paperclip-adapter"
+  },
+  "keywords": ["paperclip", "groq", "ai-agent", "adapter", "free-llm"],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./server": {
+      "types": "./dist/server/index.d.ts",
+      "import": "./dist/server/index.js"
+    },
+    "./ui-parser": {
+      "types": "./dist/ui/index.d.ts",
+      "import": "./dist/ui/index.js",
+      "default": "./dist/ui/index.js"
+    }
+  },
+  "files": ["dist", "README.md"],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@paperclipai/adapter-utils": "^2026.416.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.7.0"
+  },
+  "engines": { "node": ">=20.0.0" },
+  "paperclip": {
+    "adapterType": "groq_local",
+    "adapterUiParser": "1"
+  }
+}
