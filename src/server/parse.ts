@@ -16,9 +16,25 @@ import crypto from "node:crypto";
 import type { AdapterSessionCodec } from "@paperclipai/adapter-utils";
 import { SESSION_DIR } from "../shared/constants.js";
 
+export interface ChatToolCall {
+  id: string;
+  type: "function";
+  function: {
+    name: string;
+    arguments: string;
+  };
+}
+
 export interface ChatMessage {
-  role: "system" | "user" | "assistant";
+  role: "system" | "user" | "assistant" | "tool";
+  /** Assistant messages may carry only tool_calls and an empty content. */
   content: string;
+  /** Assistant-side tool invocations. */
+  tool_calls?: ChatToolCall[];
+  /** Tool-result messages: id of the tool_call being answered. */
+  tool_call_id?: string;
+  /** Tool-result messages: friendly tool name (OpenAI-compatible). */
+  name?: string;
 }
 
 export interface SessionFile {
@@ -50,7 +66,10 @@ export async function loadSession(sessionId: string): Promise<SessionFile | null
       messages: parsed.messages.filter(
         (m): m is ChatMessage =>
           !!m && typeof m === "object" &&
-          (m.role === "system" || m.role === "user" || m.role === "assistant") &&
+          (m.role === "system" ||
+            m.role === "user" ||
+            m.role === "assistant" ||
+            m.role === "tool") &&
           typeof m.content === "string",
       ),
       createdAt: typeof parsed.createdAt === "string" ? parsed.createdAt : new Date().toISOString(),
@@ -78,8 +97,21 @@ export async function saveSession(sessionId: string, messages: ChatMessage[]): P
  * a usage object, or null for non-content events (role messages,
  * [DONE], empty lines).
  */
+/**
+ * One chunk of a streaming tool_call. Groq (OpenAI-compat) streams tool
+ * call args token-by-token, keyed by `index`. Consumers accumulate
+ * per-index into a ChatToolCall.
+ */
+export interface StreamToolCallDelta {
+  index: number;
+  id?: string;
+  name?: string;
+  argumentsDelta?: string;
+}
+
 export interface StreamDelta {
   textDelta?: string;
+  toolCalls?: StreamToolCallDelta[];
   usage?: {
     prompt_tokens?: number;
     completion_tokens?: number;
@@ -108,6 +140,23 @@ export function parseSseLine(line: string): StreamDelta | null {
   if (first) {
     const delta = (first.delta ?? {}) as Record<string, unknown>;
     if (typeof delta.content === "string") out.textDelta = delta.content;
+    const rawToolCalls = Array.isArray(delta.tool_calls) ? delta.tool_calls : [];
+    if (rawToolCalls.length > 0) {
+      const tcs: StreamToolCallDelta[] = [];
+      for (const raw of rawToolCalls) {
+        if (!raw || typeof raw !== "object") continue;
+        const rec = raw as Record<string, unknown>;
+        const idx = typeof rec.index === "number" ? rec.index : 0;
+        const fn = (rec.function ?? {}) as Record<string, unknown>;
+        tcs.push({
+          index: idx,
+          id: typeof rec.id === "string" ? rec.id : undefined,
+          name: typeof fn.name === "string" ? fn.name : undefined,
+          argumentsDelta: typeof fn.arguments === "string" ? fn.arguments : undefined,
+        });
+      }
+      if (tcs.length > 0) out.toolCalls = tcs;
+    }
     const finish = first.finish_reason;
     if (typeof finish === "string" || finish === null) out.finishReason = finish ?? null;
   }
